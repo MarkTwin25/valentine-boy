@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTEMA DE ANÁLISIS - STABLE_V5</title>
+    <style>
+        :root {
+            --bg: #0a0f1d;
+            --accent: #38bdf8;
+            --text: #f1f5f9;
+            --error: #fb7185;
+            --terminal-bg: rgba(15, 23, 42, 0.9);
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        /* --- CANVAS SIEMPRE PRESENTE --- */
+        #bgCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1; /* Detrás de todo */
+            pointer-events: none;
+        }
+
+        /* --- CAPAS DE LA INTERFAZ --- */
+        .overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        #login-screen {
+            background: var(--bg);
+            transition: opacity 0.8s ease;
+        }
+
+        #main-content {
+            opacity: 0;
+            display: none;
+            transition: opacity 1.5s ease;
+            z-index: 5;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 85%;
+            border: 1px solid var(--accent);
+            padding: 2rem;
+            border-radius: 8px;
+            background: var(--terminal-bg);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(56, 189, 248, 0.1);
+        }
+
+        /* --- ELEMENTOS DE TEXTO --- */
+        h1 { color: var(--accent); border-bottom: 1px solid var(--accent); font-size: 1.4rem; margin-top: 0; }
+        input {
+            background: transparent; border: none; border-bottom: 2px solid var(--accent);
+            color: var(--text); font-family: inherit; font-size: 1.1rem;
+            padding: 8px; outline: none; text-align: center; width: 80%; margin-top: 20px;
+        }
+        button {
+            margin-top: 30px; background: var(--accent); color: var(--bg);
+            border: none; padding: 12px 25px; cursor: pointer; font-weight: bold;
+            font-family: inherit; transition: 0.3s;
+        }
+        button:hover { box-shadow: 0 0 15px var(--accent); }
+
+        .log-box {
+            background: rgba(0, 0, 0, 0.4); padding: 12px; border-radius: 4px;
+            font-size: 0.8rem; margin: 15px 0; border-left: 3px solid var(--accent);
+        }
+        .log-success { color: #4ade80; }
+        #timer { font-size: 2rem; color: #fb7185; font-weight: bold; display: block; text-align: center; margin: 10px 0; }
+        .label { font-weight: bold; color: var(--accent); text-transform: uppercase; font-size: 0.75rem; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div id="login-screen" class="overlay">
+    <div class="container" style="text-align: center;">
+        <h2 style="color:var(--accent)">SEGURIDAD DE SISTEMA</h2>
+        <p>> PREGUNTA DE VALIDACIÓN:</p>
+        <p>La primera vez que salimos todos juntos como amigos, compramos un alimento,
+            no nos dio tiempo de comerlo y nos lo llevamos al salón, ¿Qué alimento era?
+        </p> <input type="text" id="answer-input" placeholder="Respuesta..." autocomplete="off">
+        <br>
+        <button onclick="validar()">Entrar</utton>
+        <p id="error-msg" style="color:var(--error); display:none; margin-top:15px;">ACCESO DENEGADO</p>
+    </div>
+</div>
+
+<div id="main-content" class="overlay">
+    <div class="container">
+        <h1>SESSION_REPORT.SH <span style="animation: blink 1s infinite">_</span></h1>
+        
+        <span class="label">Tiempo transcurrido desde que nos conocimos:</span>
+        <div id="timer">00D 00:00:00</div>
+
+        <span class="label">Registros de Memoria:</span>
+        <div class="log-box">
+            <div>[INFO] Núcleo emocional inicializado... <span class="log-success">OK</span></div>
+            <div>[INFO] Escaneando recuerdos compartidos... <span class="log-success">100%</span></div>
+            <div>[INFO] Generando archivo de regalo... <span class="log-success">COMPLETADO</span></div>
+        </div>
+
+        <div style="font-size: 0.85rem; border-top: 1px dashed var(--accent); padding-top: 15px; opacity: 0.8;">
+            > Gracias por ser mi amigo. TKM.  
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 1. CONFIGURACIÓN ---
+    const RESPUESTA_CORRECTA = "chapata";
+    const FECHA_INICIO = new Date(2017, 8, 14); // Año, Mes(0-11), Día
+    const ARCHIVO_URL = "amigos.jpg"; // 
+
+    // --- 2. MOTOR DE ANIMACIÓN (FUERA DE LAS FUNCIONES PARA QUE NO PARE) ---
+    const canvas = document.getElementById('bgCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Particle {
+        constructor() {
+            this.init();
+        }
+        init() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.vx = (Math.random() - 0.5) * 0.5;
+            this.vy = (Math.random() - 0.5) * 0.5;
+            this.size = Math.random() * 2;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+            if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+        }
+        draw() {
+            ctx.fillStyle = "rgba(56, 189, 248, 0.5)";
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function createParticles() {
+        particles = [];
+        for (let i = 0; i < 100; i++) particles.push(new Particle());
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+            p.update();
+            p.draw();
+        });
+        requestAnimationFrame(animate);
+    }
+
+    createParticles();
+    animate();
+
+    // --- 3. LÓGICA DE INTERFAZ ---
+    function validar() {
+        const val = document.getElementById('answer-input').value.toLowerCase().trim();
+        if (val === RESPUESTA_CORRECTA) {
+            // Descarga automática
+            const link = document.createElement('a');
+            link.href = ARCHIVO_URL;
+            link.download = "amigos.pdf";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Transición
+            document.getElementById('login-screen').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('login-screen').style.display = 'none';
+                const main = document.getElementById('main-content');
+                main.style.display = 'flex';
+                setTimeout(() => { main.style.opacity = '1'; }, 50);
+                iniciarTimer();
+            }, 800);
+        } else {
+            document.getElementById('error-msg').style.display = 'block';
+            document.getElementById('answer-input').value = "";
+        }
+    }
+
+    function iniciarTimer() {
+        setInterval(() => {
+            const diff = new Date() - FECHA_INICIO;
+            const d = Math.floor(diff / 86400000);
+            const h = String(Math.floor((diff / 3600000) % 24)).padStart(2,'0');
+            const m = String(Math.floor((diff / 60000) % 60)).padStart(2,'0');
+            const s = String(Math.floor((diff / 1000) % 60)).padStart(2,'0');
+            document.getElementById('timer').innerText = `${d}D ${h}:${m}:${s}`;
+        }, 1000);
+    }
+</script>
+</body>
+</html>
